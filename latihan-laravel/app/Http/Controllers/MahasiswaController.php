@@ -3,32 +3,59 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\Mahasiswa;
+use Illuminate\Support\Facades\DB;
 
 class MahasiswaController extends Controller
 {
     public function index()
     {
-        $daftarMahasiswa = [
-            ['nim' => 'H1A123001', 'nama' => 'Andi Prasetyo', 'angkatan' => 2023],
-            ['nim' => 'H1A123002', 'nama' => 'Bunga Lestari', 'angkatan' => 2023],
-            ['nim' => 'H1A123003', 'nama' => 'Citra Ramadhani', 'angkatan' => 2024],
-        ];
+        DB::listen(function ($kueri) {
+            logger($kueri->sql);
+        });
 
-        return view('mahasiswa.index', ['daftarMahasiswa' => $daftarMahasiswa]);
+        $daftarMahasiswa = Mahasiswa::with('programStudi')
+            ->orderBy('nama')
+            ->paginate(10);
+
+        return view('mahasiswa.data', ['daftarMahasiswa' => $daftarMahasiswa]);
     }
 
     public function show(string $nim)
     {
-        return view('mahasiswa.show', ['nim' => $nim]);
+        $mahasiswa = Mahasiswa::with(['programStudi', 'matakuliah'])
+            ->where('nim', $nim)
+            ->firstOrFail();
+
+        return view('mahasiswa.show', ['mahasiswa' => $mahasiswa]);
     }
 
     public function cari(Request $request)
     {
         $katakunci = $request->query('q', '');
-            return response()->json([
+        
+        $hasil = Mahasiswa::with('programStudi')
+            ->where('nama', 'like', '%' . $katakunci . '%')
+            ->orWhere('nim', 'like', '%' . $katakunci . '%')
+            ->get();
+
+        return response()->json([
             'kata_kunci' => $katakunci,
             'metode' => $request->method(),
             'path' => $request->path(),
+            'data' => $hasil,
         ]);
+    }
+
+    public function prestasiTeknikKomputer()
+    {
+        $mahasiswaPrestasi = Mahasiswa::whereHas('programStudi', function ($query) {
+                $query->where('nama', 'Teknik Komputer');
+            })
+            ->orderBy('ipk', 'desc')
+            ->take(10)
+            ->get();
+
+        return view('mahasiswa.prestasi', ['mahasiswaPrestasi' => $mahasiswaPrestasi]);
     }
 }
