@@ -3,7 +3,10 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Auth\Access\AuthorizationException;
+use Laravel\Sanctum\Exceptions\MissingAbilityException;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Illuminate\Http\Request; 
 use Illuminate\Validation\ValidationException; 
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException; 
@@ -16,7 +19,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        
+         $middleware->alias([
+             'ability' => \Laravel\Sanctum\Http\Middleware\CheckForAnyAbility::class,
+             'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
+             'peran.admin' => \App\Http\Middleware\PeranAdmin::class,
+         ]);
+    
     })
     ->withExceptions(function (Exceptions $exceptions): void { 
         $exceptions->render(function (NotFoundHttpException $e, Request $request) { 
@@ -30,9 +39,29 @@ return Application::configure(basePath: dirname(__DIR__))
  
         $exceptions->render(function (ValidationException $e, Request $request) { 
             if ($request->is('api/*')) { 
-                return response()->json(
-                    [ 'sukses' => false, 'pesan' => 'Data yang dikirim tidak valid', 'galat' => $e->errors(), 
-                    ], 422); 
+                return response()->json([ 
+                    'sukses' => false, 
+                    'pesan' => 'Data yang dikirim tidak valid', 
+                    'galat' => $e->errors(), 
+                ], 422); 
             } 
         }); 
+
+        $exceptions->render(function (AuthenticationException $e, Request $request) { 
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'sukses' => false,
+                    'pesan' => 'Token tidak valid atau belum dikirim',
+                ], 401);
+            }
+        });
+
+        $exceptions->render(function (MissingAbilityException|AuthorizationException|AccessDeniedHttpException $e, Request $request) { 
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'sukses' => false,
+                    'pesan' => 'Anda tidak memiliki kemampuan yang cukup untuk mengakses sumber daya ini',
+                ], 403);
+            }
+        });
     })->create();
